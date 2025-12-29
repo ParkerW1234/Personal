@@ -2,31 +2,179 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Parker Wasileski</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <main>
-    <h1>Parker Wasileski</h1>
-    <h2>What I have been doing</h2>
-    <ul id="repos"></ul>
+  <div class="bg"></div>
+  <div class="noise"></div>
+
+  <main class="wrap">
+    <header class="hero">
+      <div class="badge">ParkerW1234</div>
+      <h1>Parker Wasileski</h1>
+      <p class="sub">Building things. Shipping ideas. Learning fast.</p>
+    </header>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>What I have been doing</h2>
+        <div class="controls">
+          <input id="search" type="search" placeholder="Search repos..." autocomplete="off">
+          <select id="sort">
+            <option value="updated">Recently updated</option>
+            <option value="stars">Most starred</option>
+            <option value="name">A–Z</option>
+          </select>
+        </div>
+      </div>
+
+      <div id="status" class="status">Loading repos…</div>
+      <div id="grid" class="grid" aria-live="polite"></div>
+    </section>
+
+    <footer class="foot">
+      <a class="link" href="https://github.com/ParkerW1234" target="_blank" rel="noreferrer">github.com/ParkerW1234</a>
+    </footer>
   </main>
 
   <script>
-    fetch("https://api.github.com/users/ParkerW1234/repos?sort=updated")
-      .then(r => r.json())
-      .then(data => {
-        const list = document.getElementById("repos")
-        data.forEach(repo => {
-          const li = document.createElement("li")
-          const a = document.createElement("a")
-          a.href = repo.html_url
-          a.textContent = repo.name
-          a.target = "_blank"
-          li.appendChild(a)
-          list.appendChild(li)
-        })
+    const grid = document.getElementById("grid")
+    const statusEl = document.getElementById("status")
+    const searchEl = document.getElementById("search")
+    const sortEl = document.getElementById("sort")
+
+    let repos = []
+    let filtered = []
+
+    function formatDate(iso) {
+      try {
+        const d = new Date(iso)
+        return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "2-digit" })
+      } catch {
+        return ""
+      }
+    }
+
+    function n(num) {
+      return Intl.NumberFormat().format(num || 0)
+    }
+
+    function sortRepos(list, mode) {
+      const copy = [...list]
+      if (mode === "updated") copy.sort((a, b) => new Date(b.pushed_at) - new Date(a.pushed_at))
+      if (mode === "stars") copy.sort((a, b) => (b.stargazers_count || 0) - (a.stargazers_count || 0))
+      if (mode === "name") copy.sort((a, b) => (a.name || "").localeCompare(b.name || ""))
+      return copy
+    }
+
+    function applyFilter() {
+      const q = (searchEl.value || "").trim().toLowerCase()
+      filtered = repos.filter(r => {
+        const name = (r.name || "").toLowerCase()
+        const desc = (r.description || "").toLowerCase()
+        return name.includes(q) || desc.includes(q)
       })
+      render()
+    }
+
+    function render() {
+      const mode = sortEl.value
+      const list = sortRepos(filtered, mode)
+
+      grid.innerHTML = ""
+      if (!list.length) {
+        statusEl.textContent = "No repos found."
+        statusEl.style.display = "block"
+        return
+      }
+
+      statusEl.style.display = "none"
+      list.forEach(repo => {
+        const card = document.createElement("a")
+        card.className = "card"
+        card.href = repo.html_url
+        card.target = "_blank"
+        card.rel = "noreferrer"
+
+        const top = document.createElement("div")
+        top.className = "top"
+
+        const title = document.createElement("div")
+        title.className = "title"
+        title.textContent = repo.name
+
+        const pill = document.createElement("div")
+        pill.className = "pill"
+        pill.textContent = repo.language || "—"
+
+        top.appendChild(title)
+        top.appendChild(pill)
+
+        const desc = document.createElement("div")
+        desc.className = "desc"
+        desc.textContent = repo.description || "No description yet."
+
+        const meta = document.createElement("div")
+        meta.className = "meta"
+
+        const left = document.createElement("div")
+        left.className = "meta-left"
+        left.innerHTML = `<span>★ ${n(repo.stargazers_count)}</span><span>⑂ ${n(repo.forks_count)}</span>`
+
+        const right = document.createElement("div")
+        right.className = "meta-right"
+        right.textContent = `Updated ${formatDate(repo.pushed_at)}`
+
+        meta.appendChild(left)
+        meta.appendChild(right)
+
+        card.appendChild(top)
+        card.appendChild(desc)
+        card.appendChild(meta)
+
+        grid.appendChild(card)
+      })
+    }
+
+    async function load() {
+      statusEl.style.display = "block"
+      statusEl.textContent = "Loading repos…"
+
+      try {
+        const r = await fetch("https://api.github.com/users/ParkerW1234/repos?per_page=100&sort=updated")
+        const data = await r.json()
+
+        if (!Array.isArray(data)) {
+          statusEl.textContent = "Couldn’t load repos right now."
+          return
+        }
+
+        repos = data
+          .filter(x => !x.fork)
+          .map(x => ({
+            name: x.name,
+            html_url: x.html_url,
+            description: x.description,
+            language: x.language,
+            stargazers_count: x.stargazers_count,
+            forks_count: x.forks_count,
+            pushed_at: x.pushed_at
+          }))
+
+        filtered = repos
+        statusEl.textContent = repos.length ? "" : "No repos found."
+        render()
+      } catch {
+        statusEl.textContent = "Couldn’t load repos right now."
+      }
+    }
+
+    searchEl.addEventListener("input", applyFilter)
+    sortEl.addEventListener("change", render)
+
+    load()
   </script>
 </body>
 </html>
